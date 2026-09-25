@@ -1,0 +1,372 @@
+Product Requirements Document (PRD)
+Event Booking & Ticketing API
+Item
+Detail
+Version
+1.0 (Draft)
+Date
+September 23, 2026
+Author
+[Your name]
+Project type
+Back-end web API (bootcamp final project)
+Stack
+.NET 8, Clean Architecture, CQRS with MediatR, EF Core, SQL Server, Hangfire, JWT
+1. Overview
+The Event Booking & Ticketing API lets organizers publish events with a limited number of seats, and lets attendees reserve seats, pay within a limited time and receive tickets. The service is a back-end API only. It also runs background jobs that keep the data correct without manual work, such as releasing seats from unpaid reservations.
+2. Problem Statement
+Selling a limited number of seats creates two problems. First, when many people try to book the last seats at the same time, the event can be oversold. Second, people who start a booking and never pay keep seats blocked, so other buyers cannot get them even though the seats are effectively free. Organizers need a reliable way to sell seats fairly, and attendees need a simple way to hold a seat while they pay.
+3. Goals and Non-Goals
+Goals
+Never oversell an event, even under concurrent requests
+Hold seats for a limited time (15 minutes) and release them automatically if unpaid
+Give organizers a simple way to create and publish events
+Give attendees a simple way to browse events, reserve seats, pay and view their tickets
+Keep the code clean, tested, documented and easy to explain in an interview
+Non-Goals (Out of Scope for v1)
+A front-end or mobile application
+A real payment gateway, refunds or invoices (payment is simulated)
+Email or SMS notifications
+Seat maps, multiple ticket types or dynamic pricing
+Admin role and moderation, password reset, refresh tokens
+An organizer cancelling an event with mass cancellation of reservations
+4. Target Users
+User
+Description
+Main goals
+Organizer
+A person or company that creates and runs events.
+Create events, publish them, and have seats sold without overselling.
+Attendee
+A person who wants to attend an event.
+Find events, hold seats, pay in time, and keep their tickets.
+Visitor
+An unauthenticated person.
+Browse published events and view details before registering.
+System (Scheduler)
+Hangfire background jobs.
+Release expired reservations and complete past events automatically.
+5. Functional Requirements
+5.1 Authentication and Authorization
+ID
+Requirement
+Priority
+FR-01
+A user can register with email, password, full name and role (Organizer or Attendee).
+Must
+FR-02
+Emails must be unique and passwords must be stored as hashes.
+Must
+FR-03
+A user can log in and receive a JWT that contains the user id and role.
+Must
+FR-04
+Protected endpoints are limited by role (Organizer or Attendee).
+Must
+5.2 Event Management
+ID
+Requirement
+Priority
+FR-05
+An organizer can create an event (title, description, location, category, start date, total seats). It starts as Draft.
+Must
+FR-06
+An organizer can publish an event that he or she owns.
+Must
+FR-07
+Anyone can browse Published upcoming events with category and date filters and paging.
+Must
+FR-08
+Anyone can view an event's details, including its available seats.
+Should
+5.3 Reservations and Payment
+ID
+Requirement
+Priority
+FR-09
+An attendee can reserve 1 to 5 seats for a Published event that has not started.
+Must
+FR-10
+A reservation is Pending for 15 minutes and the seats are deducted immediately.
+Must
+FR-11
+The system never oversells. A concurrent conflict returns 409 Conflict.
+Must
+FR-12
+An attendee can confirm a simulated payment for his or her own Pending, non-expired reservation.
+Must
+FR-13
+An attendee can cancel his or her own reservation and the seats return to the event.
+Should
+5.4 Tickets
+ID
+Requirement
+Priority
+FR-14
+Confirming a payment creates a ticket with a unique code.
+Must
+FR-15
+An attendee can list his or her own tickets with event details.
+Should
+5.5 Background Jobs
+ID
+Requirement
+Priority
+FR-16
+Pending reservations older than 15 minutes are marked Expired every 5 minutes and their seats are released.
+Must
+FR-17
+Published events whose start date has passed are marked Completed every day at midnight.
+Should
+FR-18
+Both jobs appear in the Hangfire Dashboard under Recurring Jobs, and the dashboard is restricted outside development.
+Should
+5.6 Platform
+ID
+Requirement
+Priority
+FR-19
+All errors are returned as ProblemDetails with correct status codes.
+Must
+FR-20
+The API is documented with Swagger and supports JWT authorization.
+Should
+FR-21
+The database is seeded with sample data (1 organizer, 1 attendee, 2 categories, 3 events).
+Should
+6. Business Rules
+ID
+Rule
+BR-01
+Only an authenticated Attendee can reserve seats. Only an Organizer can create and publish events.
+BR-02
+An organizer can publish only his or her own Draft events.
+BR-03
+Only Published events that start in the future appear in public listings and accept reservations.
+BR-04
+A reservation must request between 1 and 5 seats and cannot exceed AvailableSeats.
+BR-05
+A new reservation is Pending and expires 15 minutes after creation.
+BR-06
+Reserving decreases AvailableSeats immediately.
+BR-07
+Only a Pending, non-expired reservation can be confirmed. Confirming creates a ticket.
+BR-08
+Cancelling or expiring a reservation returns its seats to the event.
+BR-09
+Users can pay for or cancel only their own reservations (403 Forbidden otherwise).
+BR-10
+Seats must never be oversold, even with simultaneous requests.
+BR-11
+Listing endpoints cap the page size at 50.
+BR-12
+Background jobs must be safe to run more than once (idempotent).
+7. Non-Functional Requirements
+Area
+Requirement
+Security
+Passwords are hashed with BCrypt. JWT authentication with role-based authorization. Error responses never expose stack traces or internal details. The Hangfire dashboard is not publicly accessible in production.
+Consistency
+Seat changes happen inside a transaction with optimistic concurrency (RowVersion). Two requests for the last seat produce exactly one success.
+Performance
+Listings use paging, AsNoTracking and DTO projection. Indexes on Event(Status, StartsAt) and Reservation(Status, ExpiresAt).
+Reliability
+Background jobs are idempotent and log their results. A failed job run is retried by Hangfire.
+Maintainability
+Clean Architecture with dependencies pointing inward. CQRS with MediatR. Small, well-named classes.
+Testability
+Handlers depend on interfaces so they can be unit tested. A concurrency test runs against a real database.
+Documentation
+Swagger for the API and a README with an architecture diagram and a section on how overselling is prevented.
+8. Data Model
+Entity
+Fields
+Notes
+User
+Id, Email, PasswordHash, FullName, Role
+Email is unique.
+Category
+Id, Name
+Seeded.
+Event
+Id, OrganizerId, CategoryId, Title, Description, Location, StartsAt, TotalSeats, AvailableSeats, Status, RowVersion
+Status: Draft, Published, Completed, Cancelled. RowVersion is the concurrency token.
+Reservation
+Id, EventId, UserId, Quantity, Status, CreatedAt, ExpiresAt
+Status: Pending, Confirmed, Expired, Cancelled.
+Ticket
+Id, ReservationId, Code, IssuedAt
+Code is unique.
+Relationships
+One User (Organizer) has many Events
+One Category has many Events
+One Event has many Reservations
+One User (Attendee) has many Reservations
+One Reservation has zero or one Ticket
+9. API Endpoints
+Method
+Endpoint
+Access
+Description
+Success
+Errors
+POST
+/api/auth/register
+Public
+Register a user
+201
+400, 409
+POST
+/api/auth/login
+Public
+Log in and get a JWT
+200
+400, 401
+POST
+/api/events
+Organizer
+Create a Draft event
+201
+400, 401, 403
+PUT
+/api/events/{id}/publish
+Organizer (owner)
+Publish an event
+204
+401, 403, 404, 409
+GET
+/api/events
+Public
+List upcoming events with filters and paging
+200
+400
+GET
+/api/events/{id}
+Public
+Get event details
+200
+404
+POST
+/api/events/{id}/reservations
+Attendee
+Reserve seats
+201
+400, 401, 403, 404, 409
+POST
+/api/reservations/{id}/pay
+Attendee (owner)
+Confirm payment
+200
+401, 403, 404, 409
+DELETE
+/api/reservations/{id}
+Attendee (owner)
+Cancel a reservation
+204
+401, 403, 404, 409
+GET
+/api/tickets/mine
+Attendee
+List my tickets
+200
+401, 403
+GET
+/hangfire
+Restricted
+Hangfire dashboard
+200
+401, 403
+10. Background Jobs
+Job
+Cron
+Job ID
+What it does
+ReleaseExpiredReservationsJob
+*/5 * * * *
+release-expired-reservations
+Finds Pending reservations whose ExpiresAt has passed, marks them Expired and returns their seats to the event.
+CompletePastEventsJob
+0 0 * * *
+complete-past-events
+Marks Published events whose StartsAt has passed as Completed.
+11. Architecture
+Layer
+Responsibility
+Depends on
+Domain
+Entities, enums and business rules that belong to the entities.
+Nothing
+Application
+Commands, queries, handlers, validators, DTOs and interfaces (MediatR, FluentValidation).
+Domain
+Infrastructure
+EF Core DbContext and migrations, repositories, JWT and password services, Hangfire jobs, payment simulation.
+Application, Domain
+API
+Controllers, middleware, authentication setup, Swagger and dependency injection.
+Application, Infrastructure
+How overselling is prevented: reserving a seat runs inside a transaction that reads the event, checks AvailableSeats, decreases it and saves. The Event has a RowVersion column. If two requests change the same event at once, the second save fails with a concurrency exception, and the API returns 409 Conflict. The seat count can therefore never go below zero.
+12. Success Metrics
+The concurrency test shows exactly one success when two users reserve the last seat
+Every endpoint in section 9 works and is documented in Swagger
+Both recurring jobs appear in the Hangfire Dashboard and run on schedule
+All automated tests pass
+A new developer can run the project from the README in under 10 minutes
+The Git history shows one commit per phase with clear messages
+13. Milestones
+Phase
+Deliverable
+Stories
+Points
+1
+Solution structure, domain entities, DbContext and migrations
+Foundation
+—
+2
+Authentication, event creation and publishing, error handling
+US-01 to US-04, US-13
+14
+3
+Event queries with filtering and paging
+US-05, US-06
+7
+4
+Reserve seat with concurrency handling
+US-07
+5
+5
+Payment, cancellation and tickets
+US-08 to US-10
+8
+6
+Hangfire and both recurring jobs
+US-11, US-12
+5
+7
+Tests, Swagger and README
+US-14 to US-16
+9
+14. Assumptions, Risks and Dependencies
+Assumptions
+Payment is simulated and always succeeds
+The reservation hold time is 15 minutes and the maximum is 5 seats per reservation
+A single time zone (UTC) is used for all dates
+Risks
+Risk
+Impact
+Mitigation
+Concurrency logic is hard to get right
+High
+Use RowVersion with a transaction and prove it with an integration test.
+Scope grows before Day 6
+High
+Keep to the 16 stories and move new ideas to the future backlog.
+Hangfire dashboard exposed publicly
+Medium
+Restrict it with an authorization filter outside development.
+Database not available on the demo machine
+Medium
+Document the setup in the README and provide a Docker option.
+Dependencies
+.NET 8 SDK, SQL Server (LocalDB or Docker)
+NuGet packages: MediatR, FluentValidation, EF Core, Hangfire, Swashbuckle, xUnit, FluentAssertions

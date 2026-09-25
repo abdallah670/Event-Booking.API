@@ -1,0 +1,533 @@
+Product Backlog — Event Booking & Ticketing API
+Version: 1.0     Stories: 16     Total points: 48     Date: September 23, 2026
+1. Epics Overview
+ID
+Epic
+Description
+Stories
+Points
+E1
+Authentication & Authorization
+Users can create an account and sign in securely, and every protected endpoint is limited by role.
+2
+6
+E2
+Event Management
+Organizers create and publish events, and anyone can browse and view upcoming events.
+4
+12
+E3
+Reservations & Payment
+Attendees reserve seats, pay within a limited time or cancel, and seats are never oversold.
+3
+11
+E4
+Tickets
+Attendees receive a ticket for every confirmed reservation and can view them later.
+1
+2
+E5
+Background Jobs
+Time-based rules run automatically with Hangfire, so data stays correct without manual work.
+2
+5
+E6
+Platform & Quality
+The service has consistent errors, API documentation, automated tests, sample data and a clear README.
+4
+12
+2. Backlog Summary
+ID
+Story
+Epic
+Priority
+Points
+Phase
+US-01
+Register
+E1
+High
+3
+Phase 2
+US-02
+Login
+E1
+High
+3
+Phase 2
+US-03
+Create Event
+E2
+High
+3
+Phase 2
+US-04
+Publish Event
+E2
+High
+2
+Phase 2
+US-05
+Browse Upcoming Events
+E2
+High
+5
+Phase 3
+US-06
+View Event Details
+E2
+Medium
+2
+Phase 3
+US-07
+Reserve Seat
+E3
+High
+5
+Phase 4
+US-08
+Confirm Payment
+E3
+High
+3
+Phase 5
+US-09
+Cancel Reservation
+E3
+Medium
+3
+Phase 5
+US-10
+View My Tickets
+E4
+Medium
+2
+Phase 5
+US-11
+Release Expired Reservations
+E5
+Medium
+3
+Phase 6
+US-12
+Complete Past Events
+E5
+Low
+2
+Phase 6
+US-13
+Validation & Error Handling
+E6
+High
+3
+Phase 2
+US-14
+API Documentation
+E6
+Medium
+2
+Phase 7
+US-15
+Automated Tests
+E6
+High
+5
+Phase 7
+US-16
+Seed Data & README
+E6
+Medium
+2
+Phase 7
+Phases: 1 Solution structure and domain, 2 Auth and event creation, 3 Event queries, 4 Reserve seat, 5 Payment, cancel and tickets, 6 Hangfire jobs, 7 Tests, Swagger and README. Phase 1 (solution setup, entities, DbContext) is foundation work that supports the first stories and has no story of its own.
+3. Definition of Done
+The code compiles and follows the Clean Architecture layers (Domain, Application, Infrastructure, API)
+Commands have a FluentValidation validator, and business rules are enforced in the handler
+Unit tests exist for the handler and all tests pass
+The endpoint is documented in Swagger with its response codes
+The change is committed on a feature branch with a Conventional Commits message
+4. User Stories
+E1 — Authentication & Authorization
+Epic: Users can create an account and sign in securely, and every protected endpoint is limited by role.
+US-01 — Register
+As a
+New visitor
+I want to
+register with my email, password, full name and role (Organizer or Attendee)
+So that
+I can use the platform with the right permissions
+Acceptance Criteria (Given / When / Then)
+Given a valid and unused email with a strong password, When I register, Then the account is created, the password is stored as a hash and the API returns 201
+Given an email that is already registered, When I try to register with it, Then the API returns 409 Conflict
+Given a password shorter than 8 characters or an invalid email, When I register, Then the API returns 400 with the validation errors
+Priority: High     Story Points: 3     Phase: 2
+Task Breakdown — US-01
+#
+Task
+1
+Add the User entity and the EF Core migration
+2
+Implement RegisterCommand, its handler and its validator
+3
+Add a password hasher service (BCrypt) behind an interface
+4
+Add the POST /api/auth/register endpoint
+5
+Write unit tests for success and duplicate email
+US-02 — Login
+As a
+Registered user
+I want to
+log in with my email and password
+So that
+I get a token to call protected endpoints
+Acceptance Criteria (Given / When / Then)
+Given valid credentials, When I log in, Then the API returns 200 with a JWT that contains my user id and role
+Given a wrong email or password, When I log in, Then the API returns 401 without saying which one was wrong
+Given a protected endpoint, When I call it without a token, or with the wrong role, Then the API returns 401 or 403
+Priority: High     Story Points: 3     Phase: 2
+Task Breakdown — US-02
+#
+Task
+1
+Add the JWT settings and a token service
+2
+Implement LoginCommand and its handler
+3
+Add the POST /api/auth/login endpoint
+4
+Configure authentication and the Organizer / Attendee role policies
+5
+Write tests for valid and invalid login
+E2 — Event Management
+Epic: Organizers create and publish events, and anyone can browse and view upcoming events.
+US-03 — Create Event
+As a
+Organizer
+I want to
+create an event with a title, description, location, category, start date and total seats
+So that
+attendees can find it and book it once I publish it
+Acceptance Criteria (Given / When / Then)
+Given I am a logged-in organizer and the data is valid, When I create an event, Then it is saved as Draft, AvailableSeats equals TotalSeats and the API returns 201
+Given a start date in the past or TotalSeats below 1, When I create an event, Then the API returns 400 with the validation errors
+Given I am logged in as an attendee, When I try to create an event, Then the API returns 403 Forbidden
+Priority: High     Story Points: 3     Phase: 2
+Task Breakdown — US-03
+#
+Task
+1
+Add the Event and Category entities and the migration
+2
+Implement CreateEventCommand, its handler and its validator
+3
+Add the POST /api/events endpoint restricted to the Organizer role
+4
+Write tests for valid data, invalid data and wrong role
+US-04 — Publish Event
+As a
+Organizer who owns a draft event
+I want to
+publish the event
+So that
+it becomes visible and bookable for attendees
+Acceptance Criteria (Given / When / Then)
+Given a Draft event that I own, When I publish it, Then its status becomes Published and it appears in the public list
+Given an event that belongs to another organizer, When I try to publish it, Then the API returns 403 Forbidden
+Given an event that is already Published, Completed or Cancelled, When I try to publish it, Then the API returns 409 Conflict
+Priority: High     Story Points: 2     Phase: 2
+Task Breakdown — US-04
+#
+Task
+1
+Implement PublishEventCommand and its handler with the ownership check
+2
+Add the PUT /api/events/{id}/publish endpoint
+3
+Write tests for owner, non-owner and wrong status
+US-05 — Browse Upcoming Events
+As a
+Visitor or attendee
+I want to
+browse upcoming events, filter them by category and date, and page through the results
+So that
+I can find an event I want to attend
+Acceptance Criteria (Given / When / Then)
+Given published events with future start dates, When I call GET /api/events, Then only Published future events are returned, sorted by start date, in pages
+Given a category filter or a date range, When I call the endpoint with it, Then only matching events are returned
+Given a page size above 50, When I call the endpoint, Then the page size is capped at 50
+Priority: High     Story Points: 5     Phase: 3
+Task Breakdown — US-05
+#
+Task
+1
+Implement GetUpcomingEventsQuery with a filter object (category, from, to, page, pageSize)
+2
+Return a paged response (items, page, pageSize, totalCount)
+3
+Use AsNoTracking with projection to a DTO and add an index on Status and StartsAt
+4
+Add the public GET /api/events endpoint
+5
+Write tests for filters, paging and the page-size cap
+US-06 — View Event Details
+As a
+Visitor or attendee
+I want to
+view the details of an event including its available seats
+So that
+I can decide whether to reserve
+Acceptance Criteria (Given / When / Then)
+Given a published event, When I call GET /api/events/{id}, Then the API returns its details including AvailableSeats and category
+Given an event that does not exist or is still Draft, When I call the endpoint, Then the API returns 404 Not Found
+Priority: Medium     Story Points: 2     Phase: 3
+Task Breakdown — US-06
+#
+Task
+1
+Implement GetEventDetailsQuery and the response DTO
+2
+Add the public GET /api/events/{id} endpoint
+3
+Write tests for found and not found
+E3 — Reservations & Payment
+Epic: Attendees reserve seats, pay within a limited time or cancel, and seats are never oversold.
+US-07 — Reserve Seat
+As a
+Attendee browsing an upcoming event
+I want to
+reserve one or more seats for the event
+So that
+the seats are held for me while I complete the payment
+Acceptance Criteria (Given / When / Then)
+Given an event has enough available seats, When I reserve 2 seats, Then a Pending reservation is created, the available seats drop by 2, and it expires in 15 minutes
+Given the event has fewer seats than I requested, When I try to reserve, Then the API rejects the request with 409 Conflict and no seats are deducted
+Given two attendees reserve the last seat at the same time, When both requests arrive together, Then only one succeeds and the other receives 409 Conflict
+Given an event that has already started or is not Published, When I try to reserve, Then the API rejects the request
+Priority: High     Story Points: 5     Phase: 4
+Task Breakdown — US-07
+#
+Task
+1
+Add the Reservation entity and RowVersion on Event, then create the migration
+2
+Implement ReserveSeatCommand, its handler and its validator (quantity 1 to 5)
+3
+Handle concurrency with a transaction and RowVersion, and return 409 on DbUpdateConcurrencyException
+4
+Add the POST /api/events/{id}/reservations endpoint and document it in Swagger
+5
+Write tests for the sold-out case and the two-users-one-seat case
+US-08 — Confirm Payment
+As a
+Attendee with a pending reservation
+I want to
+confirm my payment before the reservation expires
+So that
+I receive my ticket
+Acceptance Criteria (Given / When / Then)
+Given I have a Pending reservation that has not expired, When my payment is confirmed, Then its status becomes Confirmed and a ticket with a unique code is created
+Given my reservation has already expired, When I try to pay, Then the API rejects the payment and no ticket is issued
+Given a reservation that belongs to another user, When I try to pay, Then the API returns 403 Forbidden
+Priority: High     Story Points: 3     Phase: 5
+Task Breakdown — US-08
+#
+Task
+1
+Add the Ticket entity and the migration
+2
+Add a fake IPaymentService that always succeeds (no real gateway)
+3
+Implement ConfirmPaymentCommand with the ownership, status and expiry checks
+4
+Generate a unique ticket code
+5
+Add the POST /api/reservations/{id}/pay endpoint and write tests
+US-09 — Cancel Reservation
+As a
+Attendee with a reservation
+I want to
+cancel my reservation
+So that
+the seats go back to other attendees
+Acceptance Criteria (Given / When / Then)
+Given a Pending or Confirmed reservation that I own for an event that has not started, When I cancel it, Then its status becomes Cancelled, the seats return to the event and any ticket is removed
+Given a reservation that belongs to another user, When I try to cancel it, Then the API returns 403 Forbidden
+Given a reservation that is already Cancelled or Expired, When I try to cancel it, Then the API returns 409 Conflict
+Priority: Medium     Story Points: 3     Phase: 5
+Task Breakdown — US-09
+#
+Task
+1
+Implement CancelReservationCommand and its handler
+2
+Return the seats to the event inside a transaction with concurrency handling
+3
+Add the DELETE /api/reservations/{id} endpoint
+4
+Write tests for pending, confirmed, not-owner and already-cancelled
+E4 — Tickets
+Epic: Attendees receive a ticket for every confirmed reservation and can view them later.
+US-10 — View My Tickets
+As a
+Attendee
+I want to
+view all of my tickets with their event details
+So that
+I can show the ticket code at the event entrance
+Acceptance Criteria (Given / When / Then)
+Given I have confirmed reservations, When I call GET /api/tickets/mine, Then I receive only my tickets with code, event title, date and quantity
+Given I have no tickets, When I call the endpoint, Then the API returns 200 with an empty list
+Given I am not logged in, When I call the endpoint, Then the API returns 401
+Priority: Medium     Story Points: 2     Phase: 5
+Task Breakdown — US-10
+#
+Task
+1
+Implement GetMyTicketsQuery with a projection to a DTO
+2
+Add the GET /api/tickets/mine endpoint
+3
+Write tests for own tickets only and empty list
+E5 — Background Jobs
+Epic: Time-based rules run automatically with Hangfire, so data stays correct without manual work.
+US-11 — Release Expired Reservations
+As a
+Event organizer
+I want to
+unpaid reservations to be released automatically
+So that
+seats are not blocked by people who never pay
+Acceptance Criteria (Given / When / Then)
+Given a Pending reservation is older than 15 minutes, When the recurring job runs, Then its status becomes Expired and its seats return to the event
+Given the job runs twice in a row, When there is nothing new to release, Then no seats are released a second time
+Given the job is registered with Hangfire, When I open the dashboard, Then it appears in the Recurring Jobs tab with the cron expression */5 * * * *
+Priority: Medium     Story Points: 3     Phase: 6
+Task Breakdown — US-11
+#
+Task
+1
+Add Hangfire packages and SQL Server storage, and enable the dashboard at /hangfire
+2
+Create IReservationJobs and ReleaseExpiredReservationsJob in Infrastructure
+3
+Update expired reservations and return seats in one transaction so the job is safe to repeat
+4
+Register it with RecurringJob.AddOrUpdate using the stable ID release-expired-reservations
+5
+Write a test for the job and confirm it in the dashboard
+US-12 — Complete Past Events
+As a
+Event organizer
+I want to
+events that have already happened to be marked as Completed automatically
+So that
+event data stays accurate without manual work
+Acceptance Criteria (Given / When / Then)
+Given a Published event whose start date has passed, When the daily job runs, Then its status becomes Completed
+Given a Draft event whose start date has passed, When the daily job runs, Then its status does not change
+Given the job is registered, When I open the dashboard, Then it appears in the Recurring Jobs tab with the cron expression 0 0 * * *
+Priority: Low     Story Points: 2     Phase: 6
+Task Breakdown — US-12
+#
+Task
+1
+Create CompletePastEventsJob
+2
+Register it with RecurringJob.AddOrUpdate using the stable ID complete-past-events
+3
+Write a test for the job
+E6 — Platform & Quality
+Epic: The service has consistent errors, API documentation, automated tests, sample data and a clear README.
+US-13 — Validation & Error Handling
+As a
+API consumer
+I want to
+clear and consistent error responses
+So that
+I can understand why a request failed
+Acceptance Criteria (Given / When / Then)
+Given an invalid request, When I send it, Then the API returns 400 with a ProblemDetails body that lists the field errors
+Given a resource that does not exist, When I request it, Then the API returns 404 with a ProblemDetails body
+Given an unexpected server error, When it happens, Then the API returns 500 with a generic message and no stack trace
+Priority: High     Story Points: 3     Phase: 2
+Task Breakdown — US-13
+#
+Task
+1
+Add a MediatR ValidationBehavior that runs FluentValidation validators
+2
+Create custom exceptions (NotFound, Forbidden, Conflict)
+3
+Add global exception handling middleware that maps them to status codes with ProblemDetails
+4
+Write tests for the mapping
+US-14 — API Documentation
+As a
+Developer using the API
+I want to
+interactive API documentation with JWT support
+So that
+I can understand and try every endpoint
+Acceptance Criteria (Given / When / Then)
+Given the app is running, When I open /swagger, Then all endpoints are listed with descriptions and response codes
+Given I click Authorize and paste a JWT, When I call a protected endpoint, Then the request is sent with my token
+Priority: Medium     Story Points: 2     Phase: 7
+Task Breakdown — US-14
+#
+Task
+1
+Configure Swagger with the Bearer security scheme
+2
+Enable XML comments and add ProducesResponseType attributes
+3
+Review that every endpoint has a summary and example
+US-15 — Automated Tests
+As a
+Developer
+I want to
+automated tests for the critical logic
+So that
+I can change the code safely and prove that seats are never oversold
+Acceptance Criteria (Given / When / Then)
+Given the test project, When I run dotnet test, Then the ReserveSeat and ConfirmPayment handler tests and the job tests pass
+Given two simultaneous reservations for the last seat, When the concurrency test runs against a real database, Then exactly one succeeds and one fails with a conflict
+Priority: High     Story Points: 5     Phase: 7
+Task Breakdown — US-15
+#
+Task
+1
+Set up the xUnit test projects with FluentAssertions
+2
+Write unit tests for the ReserveSeat and ConfirmPayment handlers
+3
+Write a test for ReleaseExpiredReservationsJob
+4
+Write the concurrency integration test (SQL Server LocalDB or a container, because it needs real RowVersion behavior)
+US-16 — Seed Data & README
+As a
+Reviewer or interviewer
+I want to
+to run the project quickly with sample data and read a clear README
+So that
+I can understand the project without asking questions
+Acceptance Criteria (Given / When / Then)
+Given a fresh clone of the repository, When I follow the README and run the app, Then the database is created and seeded with 1 organizer, 1 attendee, 2 categories and 3 events
+Given the README, When I read it, Then it has the description, a Mermaid architecture diagram, run steps and a section called How I prevent overselling
+Priority: Medium     Story Points: 2     Phase: 7
+Task Breakdown — US-16
+#
+Task
+1
+Write a data seeder
+2
+Write the README with the Mermaid diagram
+3
+Add a .gitignore for .NET and a sample .http file for the main flow
+5. Future Backlog (Out of Scope for v1)
+Organizer cancels an event and all reservations are cancelled and notified
+Email or SMS notifications and event reminders
+Real payment gateway and refunds
+Waiting list when an event is sold out
+Admin role and moderation
+Refresh tokens and password reset
