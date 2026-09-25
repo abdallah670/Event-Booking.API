@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Application.Events.Commands;
+using Application.Events.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +11,39 @@ namespace Api.Controllers;
 [Route("api/events")]
 public sealed class EventsController(IMediator mediator) : ControllerBase
 {
+    /// <summary>Gets published future events with optional category and date filters.</summary>
+    [HttpGet]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(PagedResult<EventSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetUpcoming(
+        [FromQuery] int? categoryId,
+        [FromQuery] DateTimeOffset? from,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await mediator.Send(
+            new GetUpcomingEventsQuery(categoryId, from, page, pageSize),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>Gets details for one event.</summary>
+    [HttpGet("{id:guid}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(EventDetails), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetDetails(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(
+            new GetEventDetailsQuery(id),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
     /// <summary>Creates a draft event for the authenticated organizer.</summary>
     [HttpPost]
     [Authorize(Policy = "OrganizerOnly")]
