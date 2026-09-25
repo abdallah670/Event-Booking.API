@@ -1,1 +1,14 @@
-.Kilo
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+TestResults/
+coverage/
+*.db
+*.db-shm
+*.db-wal
+.kilo/
